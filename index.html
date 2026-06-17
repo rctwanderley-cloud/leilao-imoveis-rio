@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leilão de Imóveis Rio de Janeiro</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { font-family: 'Inter', sans-serif; }
+    .slider-container { position: relative; height: 6px; }
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; outline: none; position: absolute; top: 0; pointer-events: none; background: transparent; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; cursor: pointer; pointer-events: all; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+    input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; cursor: pointer; pointer-events: all; border: 2px solid white; }
+    .card-hover { transition: transform 0.2s, box-shadow 0.2s; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.12); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    .toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; }
+    .line-through-value { text-decoration: line-through; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-white min-h-screen">
+
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── DADOS DOS IMÓVEIS (fonte: SPY Leilões / Caixa / Portella — junho 2026) ──
+const IMOVEIS_RAW = [
+  // COPACABANA (13 imóveis)
+  {id:1, bairro:"Copacabana", valor:739079.56, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-23", endereco:"Rua Saint Roman, 480 - Ap 203, Copacabana", caracteristicas:"Apartamento em Copacabana.", link:"https://spyleiloes.com.br/leilao/915416/apartamento-rua-saint-roman-copacabana-rio-de-janeiro-rj"},
+  {id:2, bairro:"Copacabana", valor:675000.00, valor1leilao:1350000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-25", endereco:"Rua Raul Pompeia, 240 - Ap 901, Copacabana", caracteristicas:"Direitos aquisitivos, Ed. Jambock, V.A. R$1.350.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/899059/apartamento-edificio-jambock-rua-raul-pompeia-copacabana-rio-de-janeiro-rj"},
+  {id:3, bairro:"Copacabana", valor:850000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-25", endereco:"Rua Conselheiro Lafaiete, 15 - Ap 402, Copacabana", caracteristicas:"V.A. R$1.700.000, desconto 50%. NOVO.", link:"https://spyleiloes.com.br/leilao/928260/apartamento-rua-conselheiro-lafaiete-copacabana-rio-de-janeiro-rj"},
+  {id:4, bairro:"Copacabana", valor:415000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-24", endereco:"Rua Santa Clara, 431 - Bloco 02, Copacabana", caracteristicas:"Cond. Mirante de Copacabana. NOVO.", link:"https://spyleiloes.com.br/leilao/927575/apartamento-condominio-mirante-de-copacabana-rua-santa-clara-copacabana-rio-de-janeiro-rj"},
+  {id:5, bairro:"Copacabana", valor:362922.70, valor1leilao:725845.44, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:50, dataEncerramento:"2026-06-30", endereco:"Rua Cinco de Julho, 188 - Ap 901, Copacabana", caracteristicas:"50m², perto da praia.", link:"https://spyleiloes.com.br/leilao/905772/apartamento-condominio-cerejeiras-rua-cinco-de-julho-copacabana-rio-de-janeiro-rj"},
+  {id:6, bairro:"Copacabana", valor:700000.00, valor1leilao:1400000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-21", endereco:"Rua Dias da Rocha, 09 - Copacabana", caracteristicas:"Ed. Monsaraz, V.A. R$1.400.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/918339/apartamento-condominio-do-edificio-monsaraz-rua-dias-da-rocha-copacabana-rio-de-janeiro-rj"},
+  {id:7, bairro:"Copacabana", valor:850000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-25", endereco:"Posto 6 - Copacabana", caracteristicas:"Apartamento no Posto 6.", link:"https://spyleiloes.com.br/leilao/926114/apartamento-posto-6-copacabana-rio-de-janeiro-rj"},
+  {id:8, bairro:"Copacabana", valor:850000.00, valor1leilao:1200000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-30", endereco:"Rua Assis Brasil, 143 - Ap 910, Bl 3, Copacabana", caracteristicas:"V.A. R$1.200.000, desconto 29%.", link:"https://spyleiloes.com.br/leilao/916162/apartamento-rua-assis-brasil-copacabana-rio-de-janeiro-rj"},
+  {id:9, bairro:"Copacabana", valor:432000.00, valor1leilao:780980.40, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-03", endereco:"Ladeira dos Tabajaras, 156 - Apto 802, Copacabana", caracteristicas:"V.A. R$720.000.", link:"https://spyleiloes.com.br/leilao/903257/apartamento-ladeira-dos-tabajaras-copacabana-rio-de-janeiro-rj"},
+  {id:10, bairro:"Copacabana", valor:350000.00, valor1leilao:525000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:2, suites:null, banheiros:null, vagas:1, area:78, dataEncerramento:"2026-07-21", endereco:"Rua Figueiredo Magalhães, 771 - No 606, Copacabana", caracteristicas:"78m², 2 quartos, 1 vaga, desconto 50%.", link:"https://spyleiloes.com.br/leilao/862870/apartamento-edificio-rua-figueiredo-magalhaes-copacabana-rio-de-janeiro-rj"},
+  {id:11, bairro:"Copacabana", valor:1300000.00, valor1leilao:2600000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Rua Domingos Ferreira, 59 - Apto 1102, Copacabana", caracteristicas:"V.A. R$2.600.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/921533/apartamento-rua-domingos-ferreira-copacabana-rio-de-janeiro-rj"},
+  {id:12, bairro:"Copacabana", valor:225000.00, valor1leilao:448971.12, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-29", endereco:"Av. Nossa Senhora de Copacabana, 1003 - Apto 1101, Copacabana", caracteristicas:"Apartamento na Av. N. Sra. Copacabana.", link:"https://spyleiloes.com.br/leilao/921943/apartamento-predio-residencial-avenida-nossa-senhora-de-copacabana-copacabana-rio-de-janeiro-rj"},
+  {id:13, bairro:"Copacabana", valor:300000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:38, dataEncerramento:"2026-07-12", endereco:"Rua Paula Freitas, 32 - Copacabana", caracteristicas:"38m², quadra da praia, Ed. Country.", link:"https://spyleiloes.com.br/leilao/912761/apartamento-edificio-country-rua-paula-freitas-copacabana-rio-de-janeiro-rj"},
+  // BOTAFOGO (7 imóveis)
+  {id:14, bairro:"Botafogo", valor:260000.00, valor1leilao:520000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:38, dataEncerramento:"2026-07-21", endereco:"Rua Lauro Müller, 36 - Apto 1411, Botafogo", caracteristicas:"38m², desconto 50%.", link:"https://spyleiloes.com.br/leilao/905352/apartamento-rua-lauro-muler-botafogo-rio-de-janeiro-rj"},
+  {id:15, bairro:"Botafogo", valor:1906318.00, valor1leilao:2222306.80, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:3, suites:null, banheiros:null, vagas:1, area:null, dataEncerramento:"2026-07-10", endereco:"Rua Voluntários da Pátria, 139 - Apto 802, Botafogo", caracteristicas:"3 quartos, 1 vaga, Caixa Econômica.", link:"https://spyleiloes.com.br/leilao/914539/apartamento-rua-voluntarios-da-patria-botafogo-rio-de-janeiro-rj"},
+  {id:16, bairro:"Botafogo", valor:1888791.80, valor1leilao:2222306.80, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-10", endereco:"Rua Voluntários da Pátria, 139 - Ap 803, Botafogo", caracteristicas:"V.A. R$1.650.000.", link:"https://spyleiloes.com.br/leilao/780420/apartamento-rua-voluntarios-da-patria-botafogo-rio-de-janeiro-rj"},
+  {id:17, bairro:"Botafogo", valor:175000.00, valor1leilao:350000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-21", endereco:"Praia de Botafogo, 356 - Apto 955, Botafogo", caracteristicas:"Desconto 50%.", link:"https://spyleiloes.com.br/leilao/919138/apartamento-praia-de-botafogo-botafogo-rio-de-janeiro-rj"},
+  {id:18, bairro:"Botafogo", valor:201000.00, valor1leilao:401985.78, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-25", endereco:"Rua da Passagem, 146 - Apto 501, Botafogo", caracteristicas:"Apartamento em Botafogo.", link:"https://spyleiloes.com.br/leilao/891603/apartamento-rua-da-passagem-botafogo-rio-de-janeiro-rj"},
+  {id:19, bairro:"Botafogo", valor:550000.00, valor1leilao:1100000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Rua São Clemente, 262 - Bl 1, Apto 602, Botafogo", caracteristicas:"V.A. R$1.100.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/920695/apartamento-edificio-rua-sao-clemente-botafogo-rio-de-janeiro-rj"},
+  {id:20, bairro:"Botafogo", valor:858888.00, valor1leilao:1049061.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-22", endereco:"Av. Pasteur, 120 - Apto 302, Botafogo", caracteristicas:"V.A. R$1.011.000.", link:"https://spyleiloes.com.br/leilao/900966/apartamento-avenida-pasteur-botafogo-rio-de-janeiro-rj"},
+  // IPANEMA (3 imóveis)
+  {id:21, bairro:"Ipanema", valor:784000.00, valor1leilao:1566178.40, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-25", endereco:"Rua Alberto de Campos, 111 - Apto 01, Ipanema", caracteristicas:"Apartamento em Ipanema.", link:"https://spyleiloes.com.br/leilao/899262/apartamento-rua-alberto-de-campos-ipanema-rio-de-janeiro-rj"},
+  {id:22, bairro:"Ipanema", valor:2160000.00, valor1leilao:2700000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Av. Vieira Souto, 216 - Apto 101, Ipanema", caracteristicas:"V.A. R$2.700.000, desconto 20%.", link:"https://spyleiloes.com.br/leilao/920692/apartamento-avenida-vieira-souto-ipanema-rio-de-janeiro-rj"},
+  {id:23, bairro:"Ipanema", valor:931444.00, valor1leilao:1164305.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:97, dataEncerramento:"2026-06-29", endereco:"Rua Barão da Torre, 32 - Bl A, Ap 508, Ipanema", caracteristicas:"97m², V.A. R$1.164.305, desconto 20%.", link:"https://spyleiloes.com.br/leilao/907448/apartamento-edificio-situado-a-rua-barao-da-torre-n-32-rua-barao-da-torre-ipanema-rio-de-janeiro-rj"},
+  // FLAMENGO (4 imóveis únicos)
+  {id:24, bairro:"Flamengo", valor:1000000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-02", endereco:"Rua Machado de Assis, 17 - Ap 101, Flamengo", caracteristicas:"Ed. Barth, V.A. R$1.000.000.", link:"https://spyleiloes.com.br/leilao/919975/apartamento-edificio-barth-rua-machado-de-assis-flamengo-rio-de-janeiro-rj"},
+  {id:25, bairro:"Flamengo", valor:1000000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-02", endereco:"Rua Machado de Assis, 17 - Ap 302, Flamengo", caracteristicas:"Ed. Barth, V.A. R$1.000.000.", link:"https://spyleiloes.com.br/leilao/919976/apartamento-edificio-barth-rua-machado-de-assis-flamengo-rio-de-janeiro-rj"},
+  {id:26, bairro:"Flamengo", valor:1000000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-02", endereco:"Praia do Flamengo, 186 - Ap 1001, Flamengo", caracteristicas:"Ed. Anchieta, V.A. R$1.000.000.", link:"https://spyleiloes.com.br/leilao/919979/apartamento-edificio-anchieta-praia-do-flamengo-flamengo-rio-de-janeiro-rj"},
+  {id:27, bairro:"Flamengo", valor:1000000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-02", endereco:"Praia do Flamengo, 186 - Ap 1002, Flamengo", caracteristicas:"Ed. Anchieta, V.A. R$1.000.000.", link:"https://spyleiloes.com.br/leilao/917379/apartamento-edificio-anchieta-praia-do-flamengo-flamengo-rio-de-janeiro-rj"},
+  // CATETE (3 imóveis)
+  {id:28, bairro:"Catete", valor:136260.00, valor1leilao:272520.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:30, dataEncerramento:"2026-07-16", endereco:"Rua Bento Lisboa, 184 - Ap 1108, Catete", caracteristicas:"30m², frente.", link:"https://spyleiloes.com.br/leilao/909103/apartamento-rua-bento-lisboa-catete-rio-de-janeiro-rj"},
+  {id:29, bairro:"Catete", valor:267000.00, valor1leilao:532500.60, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-29", endereco:"Rua Silveira Martins, 140 - Apto 502, Catete", caracteristicas:"Apartamento no Catete.", link:"https://spyleiloes.com.br/leilao/921945/apartamento-edificado-em-08-pavimentos-contendo-07-apartamentos-por-andar-portaria-nao-e-24hs-antiga-rua-silveira-martins-catete-rio-de-janeiro-rj"},
+  {id:30, bairro:"Catete", valor:168000.00, valor1leilao:334118.03, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-29", endereco:"Rua Silveira Martins, 140 - Apto 503, Catete", caracteristicas:"Apartamento no Catete.", link:"https://spyleiloes.com.br/leilao/922315/apartamento-edificado-em-08-pavimentos-contendo-07-apartamentos-por-andar-portaria-nao-e-24hs-antiga-rua-silveira-martins-catete-rio-de-janeiro-rj"},
+  // LEBLON (3 imóveis)
+  {id:31, bairro:"Leblon", valor:1078000.00, valor1leilao:1540000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:2, area:91, dataEncerramento:"2026-06-25", endereco:"Rua Conde Bernadotte, 26 - Bl 1, Leblon", caracteristicas:"91m², 2 vagas.", link:"https://spyleiloes.com.br/leilao/919842/apartamento-rua-conde-bernadotte-leblon-rio-de-janeiro-rj"},
+  {id:32, bairro:"Leblon", valor:1425000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:2, area:null, dataEncerramento:"2026-06-27", endereco:"Rua Timóteo da Costa, 1100 - Bl I, Ap 504, Leblon", caracteristicas:"Alto padrão, 2 vagas.", link:"https://spyleiloes.com.br/leilao/900895/apartamento-condominio-alto-leblon-1100-rua-timoteo-da-costa-leblon-rio-de-janeiro-rj"},
+  {id:33, bairro:"Leblon", valor:6500000.00, valor1leilao:13000000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:2, area:null, dataEncerramento:"2026-07-14", endereco:"Rua Timóteo da Costa, 175 - Ap 801, Leblon", caracteristicas:"Alto padrão, 2 vagas, V.A. R$13.000.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/901896/apartamento-rua-timoteo-da-costa-leblon-rio-de-janeiro-rj"},
+  // LAGOA (1 imóvel)
+  {id:34, bairro:"Lagoa", valor:3468000.00, valor1leilao:6934480.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-25", endereco:"Av. Epitácio Pessoa, 1976 - Apto 301, Lagoa", caracteristicas:"Apartamento na Lagoa Rodrigo de Freitas.", link:"https://spyleiloes.com.br/leilao/905587/apartamento-avenida-epitacio-pessoa-lagoa-rio-de-janeiro-rj"},
+  // TIJUCA (5 imóveis)
+  {id:35, bairro:"Tijuca", valor:133125.16, valor1leilao:266250.30, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:60, dataEncerramento:"2026-06-18", endereco:"Rua Barão de Itapagipe, 519 - Ap 101, Tijuca", caracteristicas:"60m².", link:"https://spyleiloes.com.br/leilao/894587/apartamento-rua-barao-de-itapagipe-tijuca-rio-de-janeiro-rj"},
+  {id:36, bairro:"Tijuca", valor:375000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-25", endereco:"Rua Taumaturgo de Azevedo, 74 - Ap 301, Tijuca", caracteristicas:"V.A. R$500.000, desconto 25%. 1 vaga.", link:"https://spyleiloes.com.br/leilao/802591/apartamento-rua-taumaturgo-de-azevedo-tijuca-rio-de-janeiro-rj"},
+  {id:37, bairro:"Tijuca", valor:229583.00, valor1leilao:459164.70, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:1, area:64, dataEncerramento:"2026-07-10", endereco:"Rua Pereira Nunes, 395 - Ap 205, Tijuca", caracteristicas:"64m², 1 vaga.", link:"https://spyleiloes.com.br/leilao/905350/apartamento-edificio-situado-na-rua-pereira-nunes-n-395-rua-pereira-nunes-tijuca-rio-de-janeiro-rj"},
+  {id:38, bairro:"Tijuca", valor:412500.00, valor1leilao:440000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:1, area:70, dataEncerramento:"2026-07-07", endereco:"Rua Babilônia, 40 - Ap 301, Tijuca", caracteristicas:"70m², 1 vaga, V.A. R$440.000.", link:"https://spyleiloes.com.br/leilao/913934/apartamento-rua-babilonia-tijuca-rio-de-janeiro-rj"},
+  {id:39, bairro:"Tijuca", valor:212400.00, valor1leilao:354000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-20", endereco:"Rua Coronel Correia Lima, 55 - Apto 102, Tijuca", caracteristicas:"V.A. R$354.000, desconto 40%.", link:"https://spyleiloes.com.br/leilao/919575/apartamento-rua-coronel-correia-lima-tijuca-rio-de-janeiro-rj"},
+  // BARRA DA TIJUCA (7 imóveis)
+  {id:40, bairro:"Barra da Tijuca", valor:1120000.00, valor1leilao:2800000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-30", endereco:"Av. Jornalista Tim Lopes, 255 - Ap 610, Bl 7, Barra da Tijuca", caracteristicas:"V.A. R$2.800.000, desconto 60%.", link:"https://spyleiloes.com.br/leilao/916255/apartamento-avenida-jornalista-tim-lopes-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:41, bairro:"Barra da Tijuca", valor:650000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:1, area:null, dataEncerramento:"2026-06-20", endereco:"Av. Jaime Poggi, 99 - Apto 107, Bl 02, Barra da Tijuca", caracteristicas:"Cond. alto padrão, 1 vaga.", link:"https://spyleiloes.com.br/leilao/908585/apartamento-condominio-de-alto-padrao-avenida-jaime-poggi-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:42, bairro:"Barra da Tijuca", valor:1600000.00, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-30", endereco:"Av. Lúcio Costa, 4700 - Barra da Tijuca", caracteristicas:"Cond. Barrabella Hotel Residência. V.A. R$1.600.000.", link:"https://spyleiloes.com.br/leilao/905439/apartamento-condominio-barrabella-hotel-residencia-avenida-lucio-costa-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:43, bairro:"Barra da Tijuca", valor:2485636.20, valor1leilao:2338728.80, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:136, dataEncerramento:"2026-06-22", endereco:"Av. Lúcio Costa, 3360 - Bl 7, Barra da Tijuca", caracteristicas:"136m², Ed. Acquabella.", link:"https://spyleiloes.com.br/leilao/912980/apartamento-edificio-acquabella-avenida-lucio-costa-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:44, bairro:"Barra da Tijuca", valor:1313759.50, valor1leilao:1716057.90, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:89, dataEncerramento:"2026-06-24", endereco:"Av. Lucio Costa, 6200 - Apt 804, Barra da Tijuca", caracteristicas:"89m², Leilão Banco Inter.", link:"https://spyleiloes.com.br/leilao/905223/apartamento-avenida-lucio-costa-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:45, bairro:"Barra da Tijuca", valor:1750000.00, valor1leilao:3500000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Av. Lúcio Costa, 4600 - Bl 3, Apto 301, Barra da Tijuca", caracteristicas:"Ed. Waterways West, V.A. R$3.500.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/921532/apartamento-edificio-waterways-west-av-lucio-costa-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:46, bairro:"Barra da Tijuca", valor:1450000.00, valor1leilao:2900000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Av. Jardins de Santa Monica, 100 - Bl 5, Apto 904, Barra da Tijuca", caracteristicas:"V.A. R$2.900.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/920696/apartamento-av-jardins-de-santa-monica-barra-da-tijuca-rio-de-janeiro-rj"},
+  {id:47, bairro:"Barra da Tijuca", valor:133000.00, valor1leilao:266000.00, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-14", endereco:"Rua General Ivan Raposo, 128 - Apto 202, Barra da Tijuca", caracteristicas:"V.A. R$266.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/921534/apartamento-rua-general-ivan-raposo-barra-da-tijuca-rio-de-janeiro-rj"},
+  // RECREIO DOS BANDEIRANTES (6 imóveis)
+  {id:48, bairro:"Recreio dos Bandeirantes", valor:475000.00, valor1leilao:950000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-07-02", endereco:"Rua Vicente Leporace, 145 - Ap 201, Recreio dos Bandeirantes", caracteristicas:"Desconto 50%.", link:"https://spyleiloes.com.br/leilao/868941/apartamento-rua-vicente-leporace-recreio-dos-bandeirantes-rio-de-janeiro-rj"},
+  {id:49, bairro:"Recreio dos Bandeirantes", valor:332625.28, valor1leilao:382000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:50, dataEncerramento:"2026-06-19", endereco:"Av. Projetada A PAA 10995, 650 - Apto 506, Bl 10, Recreio", caracteristicas:"50m², desconto 13%.", link:"https://spyleiloes.com.br/leilao/897343/apartamento-avenida-projetada-a-paa-10995-recreio-dos-bandeirantes-rio-de-janeiro-rj"},
+  {id:50, bairro:"Recreio dos Bandeirantes", valor:635087.60, valor1leilao:739683.80, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:1, area:null, dataEncerramento:"2026-07-10", endereco:"Estrada Benvindo de Novaes, 2205 - Apto 902, Bl 06, Recreio", caracteristicas:"1 vaga. Caixa Econômica.", link:"https://spyleiloes.com.br/leilao/914567/apartamento-estrada-benvindo-de-novaes-recreio-dos-bandeirantes-rio-de-janeiro-rj"},
+  {id:51, bairro:"Recreio dos Bandeirantes", valor:300000.00, valor1leilao:600000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-16", endereco:"Av. Tim Maia, 7585 - Bl 3, Apto 305, Recreio", caracteristicas:"V.A. R$600.000, desconto 50%.", link:"https://spyleiloes.com.br/leilao/894814/apartamento-avenida-tim-maia-recreio-dos-bandeirantes-rio-de-janeiro-rj"},
+  {id:52, bairro:"Recreio dos Bandeirantes", valor:325000.00, valor1leilao:650000.00, tipo:"Apartamento", tipoLeilao:"Extrajudicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-06-18", endereco:"Estrada do Pontal, 7100 - Apt 402, Recreio", caracteristicas:"Ed. Villa Del Sol Residences.", link:"https://spyleiloes.com.br/leilao/881919/apartamento-edificio-villa-del-sol-residences-estrada-do-pontal-recreio-dos-bandeirantes-rio-de-janeiro-rj"},
+  {id:53, bairro:"Recreio dos Bandeirantes", valor:990128.30, valor1leilao:null, tipo:"Apartamento", tipoLeilao:"Judicial", quartos:null, suites:null, banheiros:null, vagas:null, area:null, dataEncerramento:"2026-08-06", endereco:"Rua Nicette Bruno, 75, Recreio dos Bandeirantes", caracteristicas:"Cond. Barra Village Lakes.", link:"https://spyleiloes.com.br/leilao/882892/apartamento-condominio-barra-village-lakes-rua-nicette-bruno-recreio-dos-bandeirantes-rio-de-janeiro-rj"}
+]
+const ZONA_SUL  = ["Catete","Cosme Velho","Flamengo","Glória","Humaitá","Botafogo","Urca","Leme","Copacabana","Ipanema","Leblon","Lagoa","Jardim Botânico","Gávea","São Conrado","Arpoador"];
+const ZONA_NORTE = ["Tijuca"];
+const ZONA_OESTE = ["Barra da Tijuca","Recreio dos Bandeirantes","Jacarepaguá","Freguesia (Jacarepaguá)","Itanhangá"];
+const BAIRROS_PESQUISA = [...ZONA_SUL, ...ZONA_NORTE, ...ZONA_OESTE];
+
+const getZona = (bairro) => {
+  if (ZONA_SUL.includes(bairro))   return { label:'Zona Sul',   emoji:'⭐', css:'bg-emerald-100 text-emerald-700' };
+  if (ZONA_NORTE.includes(bairro)) return { label:'Zona Norte',  emoji:'🔵', css:'bg-blue-100 text-blue-700' };
+  if (ZONA_OESTE.includes(bairro)) return { label:'Zona Oeste',  emoji:'🟠', css:'bg-orange-100 text-orange-700' };
+  return null;
+};
+
+// Filtra apenas imóveis dos bairros da pesquisa
+const IMOVEIS = IMOVEIS_RAW.filter(im => BAIRROS_PESQUISA.includes(im.bairro));
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+const fmtBRL = v => v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+
+const diasRestantes = (data) => {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const enc = new Date(data + 'T00:00:00');
+  return Math.ceil((enc - hoje) / 86400000);
+};
+
+const countdownColor = (dias) => {
+  if (dias <= 3) return 'text-red-600 bg-red-50 border-red-200';
+  if (dias <= 7) return 'text-orange-600 bg-orange-50 border-orange-200';
+  return 'text-green-600 bg-green-50 border-green-200';
+};
+
+const desconto = (v2, v1) => Math.round((1 - v2/v1)*100);
+
+// ── ÍCONES SVG ─────────────────────────────────────────────────────────────
+const Icon = {
+  bed: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12V7a1 1 0 011-1h16a1 1 0 011 1v5M3 12h18M3 12v5a1 1 0 001 1h16a1 1 0 001-1v-5" /></svg>,
+  bath: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16M4 12a4 4 0 01-4-4V6a2 2 0 012-2h2M20 12a4 4 0 004-4V6a2 2 0 00-2-2h-2M4 12v6a2 2 0 002 2h12a2 2 0 002-2v-6" /></svg>,
+  car: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 6H6L3 12v4h18v-4l-3-6H13z" /></svg>,
+  area: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2} stroke="currentColor" fill="none"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9h18M9 3v18" /></svg>,
+  alert: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>,
+  clock: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" /></svg>,
+  download: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>,
+  refresh: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.13-3.36M20 15a9 9 0 01-14.13 3.36" /></svg>,
+  mail: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 6h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" /></svg>,
+  external: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
+  filter: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M7 8h10M10 12h4M12 16h.01" /></svg>,
+  x: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
+  home: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" strokeWidth={2} stroke="currentColor" fill="none"/></svg>,
+  spin: <svg className="w-4 h-4 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.13-3.36M20 15a9 9 0 01-14.13 3.36" /></svg>,
+  check: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+  map: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>,
+};
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function Toast({ msg, type, onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, []);
+  const colors = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+  return (
+    <div className={`toast fade-in flex items-center gap-2 text-white px-4 py-3 rounded-lg shadow-xl ${colors} max-w-sm`}>
+      <span className="text-sm font-medium">{msg}</span>
+      <button onClick={onClose} className="ml-2 opacity-70 hover:opacity-100">{Icon.x}</button>
+    </div>
+  );
+}
+
+// ── CARD ───────────────────────────────────────────────────────────────────
+function ImovelCard({ imovel }) {
+  const dias = diasRestantes(imovel.dataEncerramento);
+  const zona = getZona(imovel.bairro);
+  const tem2Leilao = !!imovel.valor1leilao;
+  const perc = tem2Leilao ? desconto(imovel.valor, imovel.valor1leilao) : 0;
+
+  return (
+    <div className="card-hover bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100 flex flex-col">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border-b border-gray-100">
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{imovel.tipo}</span>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${imovel.tipoLeilao === 'Judicial' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>{imovel.tipoLeilao}</span>
+          {tem2Leilao && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">2º Leilão</span>}
+          {zona && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${zona.css}`}>{zona.emoji} {zona.label}</span>}
+        </div>
+        <p className="text-sm font-semibold text-gray-800 line-clamp-2">{imovel.endereco === 'Consulte o link' ? '📍 Endereço via link' : imovel.endereco}</p>
+        <p className="text-xs text-blue-600 font-medium mt-1">{imovel.bairro}</p>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 flex flex-col flex-1 gap-3">
+        {/* Countdown */}
+        <div className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg border ${countdownColor(dias)}`}>
+          {dias <= 3 ? Icon.alert : Icon.clock}
+          <span>{dias > 0 ? `${dias} dias restantes` : 'Encerrado'}</span>
+          <span className="ml-auto font-normal opacity-80">{new Date(imovel.dataEncerramento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+        </div>
+
+        {/* Valor */}
+        <div>
+          {tem2Leilao && (
+            <div className="flex items-center gap-2">
+              <p className="line-through-value text-sm text-gray-400">{fmtBRL(imovel.valor1leilao)}</p>
+              <span className="text-xs font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">-{perc}%</span>
+            </div>
+          )}
+          <p className="text-2xl font-bold text-blue-700">{fmtBRL(imovel.valor)}</p>
+        </div>
+
+        {/* Detalhes */}
+        <div className="grid grid-cols-4 gap-1">
+          {[
+            { icon: Icon.bed, val: imovel.quartos, label: 'qtos' },
+            { icon: Icon.bath, val: imovel.banheiros, label: 'banh' },
+            { icon: Icon.car, val: imovel.vagas, label: 'vagas' },
+            { icon: Icon.area, val: imovel.area, label: 'm²' },
+          ].map((d, i) => (
+            <div key={i} className="flex flex-col items-center bg-gray-50 rounded-lg p-1.5 text-gray-600">
+              {d.icon}
+              <span className="text-xs font-bold mt-0.5">{d.val}</span>
+              <span className="text-xs opacity-60">{d.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Características */}
+        <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 leading-relaxed line-clamp-3">{imovel.caracteristicas}</p>
+
+        {/* Botão */}
+        <a href={imovel.link} target="_blank" rel="noopener noreferrer"
+          className="mt-auto flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold py-2.5 px-4 rounded-xl transition-all">
+          Ver Leilão {Icon.external}
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ── FILTROS ────────────────────────────────────────────────────────────────
+const MAX_PRECO = 4000000;
+
+function Filtros({ filtros, setFiltros, bairros, total, ativos }) {
+  const temFiltro = filtros.busca || filtros.quartos || filtros.bairro || filtros.tipoLeilao || filtros.precoMin > 0 || filtros.precoMax < MAX_PRECO;
+  const upd = (k, v) => setFiltros(f => ({ ...f, [k]: v }));
+  const limpar = () => setFiltros({ busca:'', quartos:'', bairro:'', tipoLeilao:'', precoMin:0, precoMax:MAX_PRECO, ordem:'zona-sul' });
+
+  return (
+    <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex flex-wrap gap-2 items-end">
+          {/* Busca */}
+          <div className="flex-1 min-w-[180px]">
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Endereço</label>
+            <input className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="Buscar endereço..." value={filtros.busca} onChange={e => upd('busca', e.target.value)} />
+          </div>
+          {/* Quartos */}
+          <div className="w-24">
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Quartos</label>
+            <select className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              value={filtros.quartos} onChange={e => upd('quartos', e.target.value)}>
+              <option value="">Todos</option>
+              {Array.from({length: Math.max(...IMOVEIS.map(im => im.quartos))}, (_, i) => i+1).map(n => <option key={n} value={n}>{n}+</option>)}
+            </select>
+          </div>
+          {/* Bairro */}
+          <div className="w-40">
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Bairro</label>
+            <select className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              value={filtros.bairro} onChange={e => upd('bairro', e.target.value)}>
+              <option value="">Todos</option>
+              {bairros.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          {/* Tipo */}
+          <div className="w-36">
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Tipo Leilão</label>
+            <select className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              value={filtros.tipoLeilao} onChange={e => upd('tipoLeilao', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="Judicial">Judicial</option>
+              <option value="Extrajudicial">Extrajudicial</option>
+            </select>
+          </div>
+          {/* Ordenação */}
+          <div className="w-48">
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Ordenar por</label>
+            <select className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              value={filtros.ordem} onChange={e => upd('ordem', e.target.value)}>
+              <option value="zona-sul">⭐ Zona Sul → 🔵 Norte → 🟠 Oeste</option>
+              <option value="preco-asc">Preço ↑ Menor</option>
+              <option value="preco-desc">Preço ↓ Maior</option>
+              <option value="area-asc">Área ↑ Menor</option>
+              <option value="area-desc">Área ↓ Maior</option>
+            </select>
+          </div>
+          {/* Limpar */}
+          {temFiltro && (
+            <button onClick={limpar} className="flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors border border-red-200">
+              {Icon.x} Limpar
+            </button>
+          )}
+        </div>
+
+        {/* Faixa de preço */}
+        <div className="mt-2 flex items-center gap-3">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Faixa:</label>
+          <span className="text-xs font-semibold text-blue-700 w-24">{fmtBRL(filtros.precoMin)}</span>
+          <div className="flex-1 flex gap-2 items-center">
+            <input type="range" min={0} max={MAX_PRECO} step={5000} value={filtros.precoMin}
+              onChange={e => { const v = +e.target.value; if (v < filtros.precoMax) upd('precoMin', v); }}
+              className="flex-1 accent-blue-600" />
+            <input type="range" min={0} max={MAX_PRECO} step={5000} value={filtros.precoMax}
+              onChange={e => { const v = +e.target.value; if (v > filtros.precoMin) upd('precoMax', v); }}
+              className="flex-1 accent-blue-600" />
+          </div>
+          <span className="text-xs font-semibold text-blue-700 w-28 text-right">{filtros.precoMax >= MAX_PRECO ? 'Sem limite' : fmtBRL(filtros.precoMax)}</span>
+          <span className="text-xs text-gray-500 whitespace-nowrap">{ativos}/{total} imóveis</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAPA PLACEHOLDER ───────────────────────────────────────────────────────
+function MapaSection({ imoveis }) {
+  const [apiKey, setApiKey] = useState('');
+  const [inputKey, setInputKey] = useState('');
+  const mapRef = useRef(null);
+  const mapLoaded = useRef(false);
+
+  const carregarMapa = useCallback(() => {
+    if (!apiKey || mapLoaded.current) return;
+    mapLoaded.current = true;
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&v=beta&callback=initMap`;
+    script.async = true;
+    window.initMap = () => {
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: { lat: -22.9068, lng: -43.1729 },
+        zoom: 12,
+        mapId: 'leilao-map',
+      });
+      imoveis.filter(im => !im.endereco.includes('Consulte')).forEach(im => {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: im.endereco + ', Rio de Janeiro, RJ, Brasil' }, (res, status) => {
+          if (status !== 'OK') return;
+          const pos = res[0].geometry.location;
+          const marker = new window.google.maps.marker.AdvancedMarkerElement({ position: pos, map, title: im.bairro });
+          const info = new window.google.maps.InfoWindow({
+            content: `<div style="font-family:Inter,sans-serif;max-width:200px"><b>${im.endereco}</b><br/><span style="color:#2563eb;font-size:1.1em">${fmtBRL(im.valor)}</span><br/>${im.quartos} qtos · ${im.banheiros} banh · ${im.area}m²</div>`
+          });
+          marker.addListener('click', () => info.open({ anchor: marker, map }));
+        });
+      });
+    };
+    document.head.appendChild(script);
+  }, [apiKey, imoveis]);
+
+  useEffect(() => { if (apiKey) carregarMapa(); }, [apiKey, carregarMapa]);
+
+  if (!apiKey) return (
+    <div className="max-w-7xl mx-auto px-4 mb-8">
+      <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
+        <div className="flex items-center gap-2 mb-4">
+          {Icon.map}
+          <h2 className="text-lg font-bold text-gray-800">Mapa Interativo</h2>
+        </div>
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-8 text-center border-2 border-dashed border-blue-200">
+          <div className="text-4xl mb-3">🗺️</div>
+          <p className="text-gray-700 font-medium mb-1">Insira sua Google Maps API Key para ativar o mapa</p>
+          <p className="text-gray-500 text-sm mb-4">Acesse <a href="https://console.cloud.google.com" target="_blank" className="text-blue-600 underline">console.cloud.google.com</a> e habilite Maps JavaScript API + Geocoding API</p>
+          <div className="flex gap-2 max-w-md mx-auto">
+            <input className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="AIzaSy..." value={inputKey} onChange={e => setInputKey(e.target.value)} />
+            <button onClick={() => setApiKey(inputKey)} disabled={!inputKey}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">
+              Carregar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 mb-8">
+      <div className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100">
+        <div className="flex items-center gap-2 p-4 border-b">
+          {Icon.map}
+          <h2 className="text-lg font-bold text-gray-800">Mapa Interativo</h2>
+        </div>
+        <div ref={mapRef} style={{ height: 400 }} className="w-full bg-gray-100 flex items-center justify-center">
+          <div className="flex items-center gap-2 text-gray-400">{Icon.spin} Carregando mapa...</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DOWNLOAD EXCEL ─────────────────────────────────────────────────────────
+function downloadExcel(imoveis) {
+  const wb = XLSX.utils.book_new();
+  const data = [
+    ['ID','Endereço','Bairro','Tipo','Tipo Leilão','Valor (R$)','1º Leilão (R$)','Quartos','Banheiros','Vagas','Área (m²)','Enc.','Link'],
+    ...imoveis.map(im => [
+      im.id, im.endereco, im.bairro, im.tipo, im.tipoLeilao,
+      im.valor, im.valor1leilao || '', im.quartos, im.banheiros,
+      im.vagas, im.area, im.dataEncerramento, im.link
+    ])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Larguras
+  ws['!cols'] = [5,40,18,14,16,18,18,8,10,7,9,12,45].map(w => ({ wch: w }));
+
+  // Estilo cabeçalho (linha 1)
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c });
+    if (!ws[addr]) continue;
+    ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1D4ED8' } }, alignment: { horizontal: 'center' } };
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Leilões RJ');
+
+  // Aba Zona Sul
+  const zonaSul = imoveis.filter(im => ZONA_SUL.includes(im.bairro)).sort((a,b) => b.valor - a.valor);
+  if (zonaSul.length) {
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ['Bairro','Endereço','Tipo','Tipo Leilão','Valor (R$)','Enc.'],
+      ...zonaSul.map(im => [im.bairro, im.endereco, im.tipo, im.tipoLeilao, im.valor, im.dataEncerramento])
+    ]);
+    ws2['!cols'] = [18,40,14,16,18,12].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws2, 'Zona Sul');
+  }
+
+  const date = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `leilao-imoveis-rio-${date}.xlsx`);
+}
+
+// ── MODAL EMAILJS CONFIG ───────────────────────────────────────────────────
+function EmailConfigModal({ onClose, onSave, config }) {
+  const [form, setForm] = useState(config);
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 fade-in">
+        <h2 className="text-xl font-bold text-gray-800 mb-1">Configurar EmailJS</h2>
+        <p className="text-sm text-gray-500 mb-4">Crie uma conta gratuita em <a href="https://emailjs.com" target="_blank" className="text-blue-600 underline">emailjs.com</a> e siga os passos abaixo.</p>
+
+        <ol className="text-xs text-gray-600 bg-blue-50 rounded-lg p-3 mb-4 space-y-1 list-decimal list-inside">
+          <li>Crie conta em emailjs.com → <b>Add New Service</b> (Gmail/Outlook) → copie o <b>Service ID</b></li>
+          <li>Vá em <b>Email Templates → Create New Template</b>. No corpo coloque: <code className="bg-white px-1 rounded">{`{{message}}`}</code> como HTML. Copie o <b>Template ID</b></li>
+          <li>Vá em <b>Account → General → Public Key</b> e copie</li>
+          <li>No template, habilite <b>"Allow File Attachments"</b> se quiser anexar o Excel</li>
+        </ol>
+
+        <div className="space-y-3">
+          {[
+            { key:'publicKey', label:'Public Key', ph:'ex: AbCdEfGhIjKl12345' },
+            { key:'serviceId', label:'Service ID', ph:'ex: service_xxxxxxx' },
+            { key:'templateId', label:'Template ID', ph:'ex: template_xxxxxxx' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">{f.label}</label>
+              <input className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder={f.ph} value={form[f.key]} onChange={e => upd(f.key, e.target.value)} />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 text-sm text-gray-600 border border-gray-200 rounded-xl py-2 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => { onSave(form); onClose(); }}
+            disabled={!form.publicKey || !form.serviceId || !form.templateId}
+            className="flex-1 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 disabled:opacity-40">
+            Salvar e Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP PRINCIPAL ──────────────────────────────────────────────────────────
+function App() {
+  const [filtros, setFiltros] = useState({ busca:'', quartos:'', bairro:'', tipoLeilao:'', precoMin:0, precoMax:MAX_PRECO, ordem:'zona-sul' });
+  const [verificando, setVerificando] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [showMapa, setShowMapa] = useState(false);
+  const [showEmailConfig, setShowEmailConfig] = useState(false);
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
+  const [emailConfig, setEmailConfig] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ejsConfig') || '{}'); } catch { return {}; }
+  });
+
+  const showToast = (msg, type='success') => setToast({ msg, type, id: Date.now() });
+
+  const salvarConfig = (cfg) => {
+    setEmailConfig(cfg);
+    try { localStorage.setItem('ejsConfig', JSON.stringify(cfg)); } catch {}
+  };
+
+  // Gera HTML da tabela Zona Sul para o corpo do email
+  const gerarCorpoEmail = () => {
+    const zonaSul = IMOVEIS.filter(im => ZONA_SUL.includes(im.bairro)).sort((a,b) => b.valor - a.valor);
+    const rows = zonaSul.map(im => `
+      <tr style="border-bottom:1px solid #e5e7eb">
+        <td style="padding:8px 12px;font-weight:600">${im.bairro}</td>
+        <td style="padding:8px 12px">${im.endereco}</td>
+        <td style="padding:8px 12px">${im.tipo}</td>
+        <td style="padding:8px 12px;color:${im.tipoLeilao==='Judicial'?'#7c3aed':'#b45309'}">${im.tipoLeilao}</td>
+        <td style="padding:8px 12px;font-weight:700;color:#1d4ed8">${fmtBRL(im.valor)}</td>
+        <td style="padding:8px 12px">${new Date(im.dataEncerramento+'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td style="padding:8px 12px"><a href="${im.link}" style="color:#2563eb">Ver Leilão</a></td>
+      </tr>`).join('');
+
+    return `
+<div style="font-family:Inter,sans-serif;max-width:700px;margin:0 auto">
+  <div style="background:linear-gradient(135deg,#2563eb,#4f46e5);padding:24px;border-radius:12px 12px 0 0">
+    <h1 style="color:white;margin:0;font-size:22px">🏠 Leilão de Imóveis Rio de Janeiro</h1>
+    <p style="color:#bfdbfe;margin:4px 0 0">Relatório gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</p>
+  </div>
+  <div style="background:#f0f9ff;padding:16px 24px;border:1px solid #bae6fd">
+    <p style="margin:0;color:#0c4a6e;font-size:14px">Total de imóveis pesquisados: <strong>${IMOVEIS.length}</strong> | Zona Sul em destaque: <strong>${zonaSul.length} imóveis</strong></p>
+  </div>
+  <div style="padding:24px;background:white;border:1px solid #e5e7eb;border-top:none">
+    <h2 style="color:#1e40af;margin-top:0">⭐ Destaques — Zona Sul</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#1d4ed8;color:white">
+          <th style="padding:10px 12px;text-align:left">Bairro</th>
+          <th style="padding:10px 12px;text-align:left">Endereço</th>
+          <th style="padding:10px 12px;text-align:left">Tipo</th>
+          <th style="padding:10px 12px;text-align:left">Leilão</th>
+          <th style="padding:10px 12px;text-align:left">Valor</th>
+          <th style="padding:10px 12px;text-align:left">Enc.</th>
+          <th style="padding:10px 12px;text-align:left">Link</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top:24px;font-size:12px;color:#6b7280">
+      Consulte sempre o edital completo antes de arrematar. Este email é meramente informativo.
+    </p>
+  </div>
+</div>`;
+  };
+
+  const enviarEmail = async () => {
+    if (!emailConfig.publicKey || !emailConfig.serviceId || !emailConfig.templateId) {
+      setShowEmailConfig(true);
+      return;
+    }
+    setEnviandoEmail(true);
+    try {
+      window.emailjs.init(emailConfig.publicKey);
+      const corpo = gerarCorpoEmail();
+      const dest1 = emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+        to_email: 'rctwanderley@terra.com.br',
+        to_name: 'Rodrigo',
+        subject: `Leiloes de Imoveis RJ - Zona Sul - ${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-')}`,
+        message: corpo,
+      });
+      const dest2 = emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+        to_email: 'gblmendes@yahoo.com.br',
+        to_name: 'Destinatário',
+        subject: `Leiloes de Imoveis RJ - Zona Sul - ${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-')}`,
+        message: corpo,
+      });
+      await Promise.all([dest1, dest2]);
+      showToast('Email enviado para rctwanderley@terra.com.br e gblmendes@yahoo.com.br ✓');
+    } catch(err) {
+      console.error(err);
+      showToast('Erro ao enviar email. Verifique as credenciais EmailJS.', 'error');
+    } finally {
+      setEnviandoEmail(false);
+    }
+  };
+
+  const bairros = [...new Set(IMOVEIS.map(im => im.bairro))].sort();
+
+  // Filtrar
+  const filtrados = IMOVEIS.filter(im => {
+    if (filtros.busca && !im.endereco.toLowerCase().includes(filtros.busca.toLowerCase()) && !im.bairro.toLowerCase().includes(filtros.busca.toLowerCase())) return false;
+    if (filtros.quartos && im.quartos < +filtros.quartos) return false;
+    if (filtros.bairro && im.bairro !== filtros.bairro) return false;
+    if (filtros.tipoLeilao && im.tipoLeilao !== filtros.tipoLeilao) return false;
+    if (im.valor < filtros.precoMin) return false;
+    if (filtros.precoMax < MAX_PRECO && im.valor > filtros.precoMax) return false;
+    return true;
+  });
+
+  // Ordenar
+  const ordenados = [...filtrados].sort((a, b) => {
+    if (filtros.ordem === 'zona-sul') {
+      const prioridade = (bairro) => ZONA_SUL.includes(bairro) ? 0 : ZONA_NORTE.includes(bairro) ? 1 : 2;
+      const pa = prioridade(a.bairro), pb = prioridade(b.bairro);
+      if (pa !== pb) return pa - pb;
+      return b.valor - a.valor;
+    }
+    if (filtros.ordem === 'preco-asc') return a.valor - b.valor;
+    if (filtros.ordem === 'preco-desc') return b.valor - a.valor;
+    if (filtros.ordem === 'area-asc') return a.area - b.area;
+    if (filtros.ordem === 'area-desc') return b.area - a.area;
+    return 0;
+  });
+
+  const atualizar = () => {
+    setVerificando(true);
+    setTimeout(() => {
+      setVerificando(false);
+      showToast(`${IMOVEIS_RAW.length} leilões verificados e ativos ✓`);
+    }, 2000);
+  };
+
+  useEffect(() => { atualizar(); }, []);
+
+  // Stats
+  const totalValor = ordenados.reduce((s, im) => s + im.valor, 0);
+  const zonaSulCount = ordenados.filter(im => ZONA_SUL.includes(im.bairro)).length;
+  const zonaNorteCount = ordenados.filter(im => ZONA_NORTE.includes(im.bairro)).length;
+  const zonaOesteCount = ordenados.filter(im => ZONA_OESTE.includes(im.bairro)).length;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
+
+      {/* HEADER */}
+      <header className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                {Icon.home}
+                <h1 className="text-2xl md:text-3xl font-bold">Leilão de Imóveis Rio de Janeiro</h1>
+              </div>
+              <p className="text-blue-200 text-sm">Oportunidades em leilão judicial e extrajudicial na capital carioca</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={atualizar} disabled={verificando}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-60 transition-colors">
+                <span className={verificando ? 'spin' : ''}>{Icon.refresh}</span>
+                {verificando ? 'Verificando...' : 'Atualizar Pesquisa'}
+              </button>
+              <button onClick={() => downloadExcel(IMOVEIS)}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+                {Icon.download} Baixar Planilha
+              </button>
+              <button onClick={enviarEmail} disabled={enviandoEmail}
+                className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60">
+                <span className={enviandoEmail ? 'spin' : ''}>{enviandoEmail ? Icon.spin : Icon.mail}</span>
+                {enviandoEmail ? 'Enviando...' : 'Enviar por Email'}
+              </button>
+              <button onClick={() => setShowEmailConfig(true)} title="Configurar EmailJS"
+                className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs font-medium px-3 py-2 rounded-xl transition-colors border border-white/30">
+                ⚙️ Email
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* LOADING BANNER */}
+      {verificando && (
+        <div className="bg-blue-50 border-b border-blue-200">
+          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-2 text-blue-700 text-sm font-medium">
+            {Icon.spin} Verificando leilões ativos...
+          </div>
+        </div>
+      )}
+
+      {/* STATS */}
+      <div className="max-w-7xl mx-auto px-4 pt-6 pb-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
+          {[
+            { label:'Total na Pesquisa', val: IMOVEIS.length, color:'blue' },
+            { label:'⭐ Zona Sul', val: zonaSulCount, color:'emerald' },
+            { label:'🔵 Zona Norte', val: zonaNorteCount, color:'blue' },
+            { label:'🟠 Zona Oeste', val: zonaOesteCount, color:'orange' },
+          ].map((s, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">{s.label}</p>
+              <p className={`text-xl font-bold text-${s.color}-600`}>{s.val}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* FILTROS */}
+      <Filtros filtros={filtros} setFiltros={setFiltros} bairros={bairros} total={IMOVEIS.length} ativos={ordenados.length} />
+
+      {/* MAPA TOGGLE */}
+      <div className="max-w-7xl mx-auto px-4 mt-4">
+        <button onClick={() => setShowMapa(m => !m)}
+          className="flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors border border-blue-200 mb-4">
+          {Icon.map} {showMapa ? 'Ocultar Mapa' : 'Exibir Mapa Interativo'}
+        </button>
+      </div>
+
+      {/* MAPA */}
+      {showMapa && <MapaSection imoveis={IMOVEIS} />}
+
+      {/* GRID DE CARDS */}
+      <main className="max-w-7xl mx-auto px-4 pb-12">
+        {ordenados.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="text-5xl mb-4">🔍</div>
+            <p className="text-gray-600 font-medium text-lg">Nenhum imóvel encontrado com os filtros selecionados.</p>
+            <p className="text-gray-400 text-sm mt-1">Tente ajustar os filtros para ver mais resultados.</p>
+          </div>
+        ) : (
+          <>
+            {/* Zona Sul destaque */}
+            {filtros.ordem === 'zona-sul' && (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">⭐ Zona Sul: {zonaSulCount}</span>
+                <span className="text-sm font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">🔵 Zona Norte: {zonaNorteCount}</span>
+                <span className="text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">🟠 Zona Oeste: {zonaOesteCount}</span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {ordenados.map(im => <ImovelCard key={im.id} imovel={im} />)}
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-gray-300">
+        <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <h3 className="text-white font-bold mb-2 flex items-center gap-2">{Icon.home} Sobre</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">Portal de monitoramento de leilões de imóveis no Rio de Janeiro. Atualizado regularmente com oportunidades judiciais e extrajudiciais.</p>
+          </div>
+          <div>
+            <h3 className="text-white font-bold mb-2">Fontes</h3>
+            <ul className="text-sm text-gray-400 space-y-1">
+              <li>• Leilões Judiciais (TJ-RJ)</li>
+              <li>• Caixas Econômicas</li>
+              <li>• Leiloeiros Credenciados</li>
+              <li>• Bancos e Financeiras</li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-white font-bold mb-2">Informações</h3>
+            <ul className="text-sm text-gray-400 space-y-1">
+              <li>• Verifique sempre o edital completo</li>
+              <li>• Consulte um advogado antes de arrematar</li>
+              <li>• Valores sujeitos a alteração</li>
+              <li>• Site meramente informativo</li>
+            </ul>
+          </div>
+        </div>
+        <div className="border-t border-gray-800 py-4 text-center text-xs text-gray-500">
+          © {new Date().getFullYear()} Leilão de Imóveis RJ — Dados meramente informativos
+        </div>
+      </footer>
+
+      {/* TOAST */}
+      {toast && <Toast key={toast.id} msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* MODAL EMAILJS */}
+      {showEmailConfig && (
+        <EmailConfigModal
+          config={{ publicKey:'', serviceId:'', templateId:'', ...emailConfig }}
+          onClose={() => setShowEmailConfig(false)}
+          onSave={salvarConfig}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
