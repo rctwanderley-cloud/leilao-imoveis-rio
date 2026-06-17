@@ -1,0 +1,76 @@
+name: Enviar email leiloes Zona Sul
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enviar email Zona Sul via Gmail
+        env:
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python3 - << 'PYEOF'
+          import smtplib, re, json, os
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.text import MIMEText
+          from datetime import datetime
+
+          ZONA_SUL = ["Catete","Cosme Velho","Flamengo","Gloria","Humaita",
+                      "Botafogo","Urca","Leme","Copacabana","Ipanema",
+                      "Leblon","Lagoa","Jardim Botanico","Gavea",
+                      "Sao Conrado","Arpoador"]
+
+          html = open('index.html', encoding='utf-8').read()
+          block = re.search(r'const IMOVEIS_RAW = \[(.*?)\n\];', html, re.DOTALL).group(1)
+          block = re.sub(r'//[^\n]*', '', block)
+          block = re.sub(r'(?<=[{,])\s*(\w+):', lambda m: '"' + m.group(1) + '":', block)
+          imoveis = json.loads('[' + block + ']')
+
+          zs = sorted([i for i in imoveis if any(b.lower() in i.get('bairro','').lower() for b in ZONA_SUL)],
+                      key=lambda x: x.get('dataEncerramento') or '9999')
+
+          def fmt(v): return '-' if v is None else 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.')
+
+          rows = ''.join(
+            f'<tr><td style="padding:5px 8px;border-bottom:1px solid #ddd;color:#1a5276;font-weight:bold">{i["bairro"]}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px">{i["endereco"]}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #ddd">{fmt(i["valor"])}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #ddd">{fmt(i.get("valor1leilao"))}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #ddd">{i.get("dataEncerramento","")}</td>'
+            f'<td style="padding:5px 8px;border-bottom:1px solid #ddd"><a href="{i["link"]}">Ver</a></td></tr>'
+            for i in zs)
+
+          hoje = datetime.now().strftime('%d/%m/%Y')
+          body = (f'<html><body style="font-family:Arial,sans-serif">'
+                  f'<h2 style="color:#1a5276">Leiloes Zona Sul - Rio de Janeiro</h2>'
+                  f'<p><b>Data:</b> {hoje} | <b>Total Zona Sul:</b> {len(zs)} imoveis</p>'
+                  f'<table style="border-collapse:collapse;width:100%">'
+                  f'<tr style="background:#1a5276;color:white">'
+                  f'<th style="padding:6px 8px;text-align:left">Bairro</th>'
+                  f'<th style="padding:6px 8px;text-align:left">Endereco</th>'
+                  f'<th style="padding:6px 8px;text-align:left">Valor (2a praca)</th>'
+                  f'<th style="padding:6px 8px;text-align:left">1a Praca</th>'
+                  f'<th style="padding:6px 8px;text-align:left">Encerramento</th>'
+                  f'<th style="padding:6px 8px;text-align:left">Link</th>'
+                  f'</tr>{rows}</table>'
+                  f'<p style="font-size:11px;color:#777">Gerado automaticamente. Fonte: spyleiloes.com.br</p>'
+                  f'</body></html>')
+
+          msg = MIMEMultipart('alternative')
+          msg['Subject'] = f'Leiloes Zona Sul Rio - {hoje} ({len(zs)} imoveis)'
+          msg['From'] = 'rctwanderley@gmail.com'
+          msg['To'] = 'rctwanderley@terra.com.br, gblmendes@yahoo.com.br'
+          msg.attach(MIMEText(body, 'html'))
+
+          with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+              s.login('rctwanderley@gmail.com', os.environ['GMAIL_APP_PASSWORD'])
+              s.sendmail('rctwanderley@gmail.com',
+                         ['rctwanderley@terra.com.br', 'gblmendes@yahoo.com.br'],
+                         msg.as_string())
+          print(f'Email enviado: {len(zs)} imoveis Zona Sul em {hoje}')
+          PYEOF
